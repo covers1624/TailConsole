@@ -30,4 +30,11 @@ public interface Tail {
      * Called on the {@link TailConsole} execution thread, before this tails lines are re-drawn.
      */
     default void tick() { }
+
+    /**
+     * Called when this Tail is initialized and all Lines have been allocated.
+     * <p>
+     * This can be used for tails that have static lines, or defaults of some kind.
+     */
+    default void onInitialized() { }
 }

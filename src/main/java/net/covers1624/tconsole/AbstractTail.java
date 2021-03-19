@@ -24,11 +24,13 @@ public abstract class AbstractTail implements Tail {
         for (int i = 0; i < numLines; i++) {
             lines.add((TailLineImpl) allocator.allocLine());
         }
+        onInitialized();
     }
 
     public boolean setLine(int line, String text) {
         return lines.get(line).set(text);
     }
+
     public boolean setLine(int line, Ansi ansi) {
         return lines.get(line).set(ansi);
     }

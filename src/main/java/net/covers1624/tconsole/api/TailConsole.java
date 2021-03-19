@@ -80,6 +80,23 @@ public interface TailConsole {
     void drawTails();
 
     /**
+     * Schedules a line to be printed to STDOUT.
+     *
+     * @param line The line.
+     */
+    void scheduleStdout(String line);
+
+    /**
+     * Stops everything and uninstalls TailConsole.
+     */
+    void shutdown();
+
+    /**
+     * Stops everything and uninstalls TailConsole.
+     */
+    boolean isShutdown();
+
+    /**
      * Gets an unmodifiable list of all {@link TailGroup}'s currently registered.
      *
      * @return The groups.

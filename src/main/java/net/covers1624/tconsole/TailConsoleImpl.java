@@ -5,8 +5,6 @@ import net.covers1624.tconsole.api.TailConsole;
 import net.covers1624.tconsole.api.TailGroup;
 import org.fusesource.jansi.Ansi;
 import org.fusesource.jansi.AnsiConsole;
-import org.fusesource.jansi.AnsiPrintStream;
-import org.fusesource.jansi.FilterPrintStream;
 import org.fusesource.jansi.internal.CLibrary;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
@@ -34,6 +32,8 @@ public class TailConsoleImpl implements TailConsole {
 
     private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(factory);
 
+    private final List<String> stdoutLines = Collections.synchronizedList(new ArrayList<>(32));
+
     private final PrintStream stdOut;
     private final PrintStream stdErr;
 
@@ -43,10 +43,11 @@ public class TailConsoleImpl implements TailConsole {
     private final boolean[] isatty = new boolean[2];
     final Terminal terminal;
 
+    private boolean shutdown;
     private ScheduledFuture<?> updateIntervalFuture = null;
     final Object lock = new Object();
     boolean linesChanged = false;
-    long lastFullRedraw = 0;
+    int lastWindowWidth = -1;
 
     public TailConsoleImpl() {
         try {
@@ -65,11 +66,13 @@ public class TailConsoleImpl implements TailConsole {
 
     @Override
     public PrintStream getAnsiOut() {
+        if (shutdown) throw new IllegalStateException();
         return ansiOut;
     }
 
     @Override
     public PrintStream getAnsiErr() {
+        if (shutdown) throw new IllegalStateException();
         return ansiErr;
     }
 
@@ -85,11 +88,13 @@ public class TailConsoleImpl implements TailConsole {
 
     @Override
     public boolean isSupported(Output output) {
+        if (shutdown) throw new IllegalStateException();
         return isatty[output.ordinal()];
     }
 
     @Override
     public void clearTails() {
+        if (shutdown) throw new IllegalStateException();
         if (!isSupported(Output.STDOUT)) {
             return;
         }
@@ -106,6 +111,7 @@ public class TailConsoleImpl implements TailConsole {
 
     @Override
     public void drawTails() {
+        if (shutdown) throw new IllegalStateException();
         if (!isSupported(Output.STDOUT)) {
             return;
         }
@@ -131,38 +137,78 @@ public class TailConsoleImpl implements TailConsole {
     }
 
     @Override
+    public void scheduleStdout(String line) {
+        if (shutdown) throw new IllegalStateException();
+        synchronized (stdoutLines) {
+            stdoutLines.add(line);
+        }
+    }
+
+    @Override
+    public void shutdown() {
+        executor.shutdown();
+        try {
+            executor.awaitTermination(3, TimeUnit.HOURS);
+        } catch (InterruptedException ignored) {
+        }
+        clearTails();
+        shutdown = true;
+        synchronized (stdoutLines) {
+            for (String line : stdoutLines) {
+                if (!line.endsWith("\n")) {
+                    line += "\n";
+                }
+                stdOut.print(line);
+            }
+        }
+        stdOut.flush();
+    }
+
+    @Override
+    public boolean isShutdown() {
+        return shutdown;
+    }
+
+    @Override
     public List<TailGroup> getTailGroups() {
+        if (shutdown) throw new IllegalStateException();
         return Collections.unmodifiableList(groups);
     }
 
     @Override
     public TailGroup newGroupFirst() {
+        if (shutdown) throw new IllegalStateException();
         return addGroup(0);
     }
 
     @Override
     public TailGroup newGroupBefore(TailGroup other) {
+        if (shutdown) throw new IllegalStateException();
         return addGroup(getIndex(other));
     }
 
     @Override
     public TailGroup newGroupAfter(TailGroup other) {
+        if (shutdown) throw new IllegalStateException();
         return addGroup(getIndex(other) + 1);
     }
 
     @Override
     public TailGroup newGroup() {
+        if (shutdown) throw new IllegalStateException();
         return addGroup(-1);
     }
 
     @Override
     public void removeGroup(TailGroup group) {
+        if (shutdown) throw new IllegalStateException();
         groups.remove(group);
         linesChanged = true;
     }
 
     @Override
     public void schedule(Runnable task) {
+        if (shutdown) throw new IllegalStateException();
         if (!isSupported(Output.STDOUT)) {
             return;
         }
@@ -171,6 +217,7 @@ public class TailConsoleImpl implements TailConsole {
 
     @Override
     public void setRefreshRate(long interval, TimeUnit unit) {
+        if (shutdown) throw new IllegalStateException();
         if (!isSupported(Output.STDOUT)) {
             return;
         }
@@ -185,12 +232,26 @@ public class TailConsoleImpl implements TailConsole {
     }
 
     void redraw() {
-        long now = System.currentTimeMillis();
-        if (linesChanged /*|| lastFullRedraw + 1000 <= now*/) {
-            clearTails();
-            drawTails();
-            lastFullRedraw = now;
-            return;
+        if (shutdown) throw new IllegalStateException();
+        boolean forceRedraw = false;
+        if (terminal != null) {
+            int width = terminal.getWidth();
+            forceRedraw = width != -1 && lastWindowWidth != width;
+            lastWindowWidth = width;
+        }
+        synchronized (stdoutLines) {
+            if (forceRedraw || linesChanged || !stdoutLines.isEmpty()) {
+                clearTails();
+                if (!stdoutLines.isEmpty()) {
+                    for (int i = 0; i < stdoutLines.size(); i++) {
+                        String stdoutLine = stdoutLines.get(i);
+                        stdOut.print(stdoutLine);
+                    }
+                    stdoutLines.clear();
+                }
+                drawTails();
+                return;
+            }
         }
         Ansi a = Ansi.ansi();
         int last = 0;
@@ -226,6 +287,7 @@ public class TailConsoleImpl implements TailConsole {
     }
 
     void rebuild() {
+        if (shutdown) throw new IllegalStateException();
         if (linesChanged) {
             synchronized (lock) {
                 tailLines.clear();
@@ -251,6 +313,7 @@ public class TailConsoleImpl implements TailConsole {
     }
 
     private int getIndex(TailGroup g) {
+        if (shutdown) throw new IllegalStateException();
         int idx = groups.indexOf(g);
         if (idx == -1) {
             throw new RuntimeException("Group does not exist.");
@@ -259,6 +322,7 @@ public class TailConsoleImpl implements TailConsole {
     }
 
     private TailGroup addGroup(int idx) {
+        if (shutdown) throw new IllegalStateException();
         TailGroupImpl group = new TailGroupImpl(this);
         synchronized (groups) {
             if (idx == -1 || (idx != 0 && idx == groups.size() - 1)) {

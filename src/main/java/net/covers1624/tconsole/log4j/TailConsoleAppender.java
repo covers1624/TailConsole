@@ -39,12 +39,8 @@ public class TailConsoleAppender extends AbstractAppender {
     @Override
     public void append(LogEvent event) {
         String str = getLayout().toSerializable(event).toString();
-        if (tailConsole != null && tailConsole.isSupported(TailConsole.Output.STDOUT)) {
-            tailConsole.schedule(() -> {
-                tailConsole.clearTails();
-                sysOut.print(str);
-                tailConsole.drawTails();
-            });
+        if (tailConsole != null && !tailConsole.isShutdown() && tailConsole.isSupported(TailConsole.Output.STDOUT)) {
+            tailConsole.scheduleStdout(str);
         } else {
             sysOut.print(str);
         }

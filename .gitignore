@@ -5,7 +5,7 @@
 !src/
 
 # Other Files.
-!LICENSE
+!LICENSE.txt
 !README.md
 
 # Gradle stuff

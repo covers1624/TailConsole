@@ -13,9 +13,6 @@ import java.util.function.Consumer;
  */
 public class ConsumingOutputStream extends OutputStream {
 
-    private static final char CR = '\r';
-    private static final char LF = '\n';
-
     private final Consumer<String> consumer;
     private final StringBuilder buffer = new StringBuilder();
 
@@ -26,21 +23,20 @@ public class ConsumingOutputStream extends OutputStream {
     @Override
     public void write(int b) {
         char ch = (char) (b & 0xFF);
-        if (ch == CR) {
-            return;
-        }
         buffer.append(ch);
-        if (ch == LF) {
+        if (ch == '\n') {
             flush();
         }
     }
 
     @Override
     public void flush() {
-        String str = buffer.toString();
-        if (str.endsWith("\n")) {
-            str = str.replaceAll("\n", "");
-            consumer.accept(str);
+        if (buffer.length() == 0) {
+            return;
+        }
+        char end = buffer.charAt(buffer.length() - 1);
+        if (end == '\n') {
+            consumer.accept(buffer.toString().trim());
             buffer.setLength(0);
         }
     }

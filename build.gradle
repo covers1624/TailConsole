@@ -3,6 +3,7 @@ plugins {
     id 'java-library'
     id 'maven-publish'
     id 'org.cadixdev.licenser' version '0.6.1'
+    id 'com.github.johnrengelman.shadow' version '5.2.0'
 }
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(8)
@@ -35,6 +36,14 @@ task srcJar(type: Jar) {
     classifier 'sources'
     from sourceSets.main.allSource
     from file("LICENSE.txt")
+}
+
+shadowJar {
+    classifier 'test'
+    configurations = [project.configurations.runtimeClasspath]
+
+    from sourceSets.main.output
+    from sourceSets.test.output
 }
 
 license {

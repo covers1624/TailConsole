@@ -64,8 +64,8 @@ public class TailConsoleImpl implements TailConsole {
         }
         ansiOut = AnsiConsole.out();
         ansiErr = AnsiConsole.err();
-        stdOut = AnsiConsole.system_out;
-        stdErr = AnsiConsole.system_err;
+        stdOut = AnsiConsole.sysOut();
+        stdErr = AnsiConsole.sysErr();
     }
 
     @Override
@@ -136,6 +136,7 @@ public class TailConsoleImpl implements TailConsole {
             line.dirty = false;
             a.a(line.text).reset();
         }
+        a.cursorToColumn(0);
         ansiOut.print(a);
         ansiOut.flush();
     }
